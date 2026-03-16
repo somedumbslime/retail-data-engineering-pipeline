@@ -1,0 +1,4 @@
+﻿id,name,category,price,created_at,updated_at
+101,Espresso Beans,Grocery,12.50,2026-03-01 08:00:00,2026-03-10 08:30:00
+102,Coffee Machine,Electronics,199.00,2026-03-01 08:00:00,2026-03-10 08:30:00
+103,Travel Mug,Home,15.90,2026-03-01 08:00:00,2026-03-10 08:30:00

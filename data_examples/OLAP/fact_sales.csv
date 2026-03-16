@@ -1,0 +1,5 @@
+﻿order_id,user_id,product_id,user_city,product_name,product_category,order_date,quantity,price_at_purchase,revenue
+5001,1,101,Kyiv,Espresso Beans,Grocery,2026-03-10,2,12.50,25.00
+5001,1,103,Kyiv,Travel Mug,Home,2026-03-10,1,15.90,15.90
+5002,2,102,Lviv,Coffee Machine,Electronics,2026-03-10,1,199.00,199.00
+5003,3,101,Odesa,Espresso Beans,Grocery,2026-03-11,3,12.50,37.50

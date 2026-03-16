@@ -1,0 +1,196 @@
+﻿name: retail-data-platform
+
+services:
+  oltp-postgres:
+    image: postgres:15
+    container_name: oltp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${OLTP_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${OLTP_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${OLTP_POSTGRES_DB:-sql_practice}
+    ports:
+      - "${OLTP_POSTGRES_EXPOSE_PORT:-5432}:5432"
+    volumes:
+      - oltp_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${OLTP_POSTGRES_USER:-postgres} -d ${OLTP_POSTGRES_DB:-sql_practice}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-bootstrap:
+    image: postgres:15
+    container_name: postgres-bootstrap
+    depends_on:
+      oltp-postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${OLTP_POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - ./start_sql:/start_sql:ro
+    command: >
+      bash -ec "psql -h oltp-postgres -U ${OLTP_POSTGRES_USER:-postgres} -d ${OLTP_POSTGRES_DB:-sql_practice} -f /start_sql/create_tables.sql;
+      psql -h oltp-postgres -U ${OLTP_POSTGRES_USER:-postgres} -d ${OLTP_POSTGRES_DB:-sql_practice} -f /start_sql/postgres_etl_metadata.sql;
+      psql -h oltp-postgres -U ${OLTP_POSTGRES_USER:-postgres} -d ${OLTP_POSTGRES_DB:-sql_practice} -f /start_sql/seed_oltp.sql"
+    restart: "no"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse-olap
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-admin}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-adminpass}
+    ports:
+      - "${CLICKHOUSE_HTTP_EXPOSE_PORT:-8123}:8123"
+      - "${CLICKHOUSE_TCP_EXPOSE_PORT:-9000}:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user ${CLICKHOUSE_USER:-admin} --password ${CLICKHOUSE_PASSWORD:-adminpass} --query 'SELECT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  clickhouse-bootstrap:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse-bootstrap
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    volumes:
+      - ./start_sql:/start_sql:ro
+    command: >
+      bash -ec "clickhouse-client --host clickhouse --user ${CLICKHOUSE_USER:-admin} --password ${CLICKHOUSE_PASSWORD:-adminpass} --multiquery < /start_sql/dwh_schema.sql;
+      clickhouse-client --host clickhouse --user ${CLICKHOUSE_USER:-admin} --password ${CLICKHOUSE_PASSWORD:-adminpass} --multiquery < /start_sql/marts.sql"
+    restart: "no"
+
+  airflow-postgres:
+    image: postgres:15
+    container_name: airflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${AIRFLOW_POSTGRES_USER:-airflow}
+      POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD:-airflow}
+      POSTGRES_DB: ${AIRFLOW_POSTGRES_DB:-airflow}
+    volumes:
+      - airflow_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AIRFLOW_POSTGRES_USER:-airflow} -d ${AIRFLOW_POSTGRES_DB:-airflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-init:
+    image: apache/airflow:2.9.3
+    container_name: airflow-init
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      oltp-postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_POSTGRES_USER:-airflow}:${AIRFLOW_POSTGRES_PASSWORD:-airflow}@airflow-postgres/${AIRFLOW_POSTGRES_DB:-airflow}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      _PIP_ADDITIONAL_REQUIREMENTS: "psycopg clickhouse-connect python-dotenv"
+      APP_POSTGRES_HOST: oltp-postgres
+      APP_POSTGRES_DB: ${OLTP_POSTGRES_DB:-sql_practice}
+      APP_POSTGRES_USER: ${OLTP_POSTGRES_USER:-postgres}
+      APP_POSTGRES_PASSWORD: ${OLTP_POSTGRES_PASSWORD:-postgres}
+      APP_POSTGRES_PORT: 5432
+      APP_CLICKHOUSE_HOST: clickhouse
+      APP_CLICKHOUSE_PORT: 8123
+      APP_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-admin}
+      APP_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-adminpass}
+      APP_CLICKHOUSE_DB: ${CLICKHOUSE_DB:-dwh}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./etl:/opt/airflow/etl
+      - ./airflow/logs:/opt/airflow/logs
+    command: >
+      bash -c "airflow db migrate &&
+      airflow users create --username ${AIRFLOW_ADMIN_USER:-admin} --password ${AIRFLOW_ADMIN_PASSWORD:-admin} --firstname admin --lastname admin --role Admin --email admin@example.com || true"
+    restart: "no"
+
+  airflow-webserver:
+    image: apache/airflow:2.9.3
+    container_name: airflow-webserver
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      clickhouse-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_POSTGRES_USER:-airflow}:${AIRFLOW_POSTGRES_PASSWORD:-airflow}@airflow-postgres/${AIRFLOW_POSTGRES_DB:-airflow}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      _PIP_ADDITIONAL_REQUIREMENTS: "psycopg clickhouse-connect python-dotenv"
+      APP_POSTGRES_HOST: oltp-postgres
+      APP_POSTGRES_DB: ${OLTP_POSTGRES_DB:-sql_practice}
+      APP_POSTGRES_USER: ${OLTP_POSTGRES_USER:-postgres}
+      APP_POSTGRES_PASSWORD: ${OLTP_POSTGRES_PASSWORD:-postgres}
+      APP_POSTGRES_PORT: 5432
+      APP_CLICKHOUSE_HOST: clickhouse
+      APP_CLICKHOUSE_PORT: 8123
+      APP_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-admin}
+      APP_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-adminpass}
+      APP_CLICKHOUSE_DB: ${CLICKHOUSE_DB:-dwh}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./etl:/opt/airflow/etl
+      - ./airflow/logs:/opt/airflow/logs
+    ports:
+      - "${AIRFLOW_WEBSERVER_PORT:-8080}:8080"
+    command: webserver
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.3
+    container_name: airflow-scheduler
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      clickhouse-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_POSTGRES_USER:-airflow}:${AIRFLOW_POSTGRES_PASSWORD:-airflow}@airflow-postgres/${AIRFLOW_POSTGRES_DB:-airflow}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      _PIP_ADDITIONAL_REQUIREMENTS: "psycopg clickhouse-connect python-dotenv"
+      APP_POSTGRES_HOST: oltp-postgres
+      APP_POSTGRES_DB: ${OLTP_POSTGRES_DB:-sql_practice}
+      APP_POSTGRES_USER: ${OLTP_POSTGRES_USER:-postgres}
+      APP_POSTGRES_PASSWORD: ${OLTP_POSTGRES_PASSWORD:-postgres}
+      APP_POSTGRES_PORT: 5432
+      APP_CLICKHOUSE_HOST: clickhouse
+      APP_CLICKHOUSE_PORT: 8123
+      APP_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-admin}
+      APP_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-adminpass}
+      APP_CLICKHOUSE_DB: ${CLICKHOUSE_DB:-dwh}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./etl:/opt/airflow/etl
+      - ./airflow/logs:/opt/airflow/logs
+    command: scheduler
+
+volumes:
+  oltp_pg_data:
+  airflow_pg_data:
+  clickhouse_data:
+  clickhouse_logs:
+

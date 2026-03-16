@@ -1,4 +1,6 @@
-﻿# Architecture Notes
+﻿[English](./architecture.md) | [Українська](./architecture.uk.md)
+
+# Architecture Notes
 
 ## Why Staging Exists
 

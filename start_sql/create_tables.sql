@@ -1,0 +1,45 @@
+﻿-- OLTP schema (PostgreSQL)
+CREATE TABLE IF NOT EXISTS users (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    city VARCHAR(100),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS products (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    price NUMERIC(10, 2) NOT NULL CHECK (price >= 0),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id),
+    order_date DATE NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'created',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS order_items (
+    id BIGSERIAL PRIMARY KEY,
+    order_id BIGINT NOT NULL REFERENCES orders(id),
+    product_id BIGINT NOT NULL REFERENCES products(id),
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    price_at_purchase NUMERIC(10, 2) NOT NULL CHECK (price_at_purchase >= 0),
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_order_item UNIQUE (order_id, product_id)
+);
+
+-- Staging schema (raw mirror of OLTP)
+CREATE SCHEMA IF NOT EXISTS staging;
+
+CREATE TABLE IF NOT EXISTS staging.users (LIKE users INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS staging.products (LIKE products INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS staging.orders (LIKE orders INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS staging.order_items (LIKE order_items INCLUDING ALL);

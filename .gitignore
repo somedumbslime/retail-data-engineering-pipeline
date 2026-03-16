@@ -8,3 +8,5 @@ venv/
 .venv/
 airflow/logs/
 etl/__pycache__/
+
+data_examples/raw/
