@@ -154,11 +154,6 @@ docker compose down
 - усі три task (`raw_etl`, `dwh_etl`, `refresh_marts`) зелені
 - дані присутні на шарах `staging`, `dwh` та `mart`
 
-Заглушки під скріншоти (замінити на свої):
-
-![Airflow DAG Success](docs/screenshots/airflow_dag_success.png)
-![DWH and Marts Data Check](docs/screenshots/dwh_marts_data_check.png)
-
 ## Підсумки Реалізації
 
 Що реалізовано:

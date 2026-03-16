@@ -154,11 +154,6 @@ After `dwh_pipeline` finishes successfully in Airflow:
 - all three tasks (`raw_etl`, `dwh_etl`, `refresh_marts`) are green
 - data is available in `staging`, `dwh`, and `mart` layers
 
-Screenshot placeholders (replace with your own):
-
-![Airflow DAG Success](docs/screenshots/airflow_dag_success.png)
-![DWH and Marts Data Check](docs/screenshots/dwh_marts_data_check.png)
-
 ## Project Outcomes
 
 Implemented:
