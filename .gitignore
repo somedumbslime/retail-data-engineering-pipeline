@@ -1,0 +1,10 @@
+﻿__pycache__/
+.env
+.ipynb_checkpoints/
+data/raw/
+*.pyc
+*.pyo
+venv/
+.venv/
+airflow/logs/
+etl/__pycache__/
