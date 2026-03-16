@@ -2,13 +2,31 @@
 
 # Retail Data Pipeline & Data Warehouse
 
-## Огляд Проєкту
+Production-style data pipeline для retail-аналітики, що демонструє пошарову архітектуру даних, інкрементальний ETL і оркестрацію через Airflow.
 
-Цей проєкт демонструє простий, але наближений до production data pipeline для retail-аналітики.
-Він використовує layer архітектуру: **OLTP -> Staging -> DWH -> Data Marts**.
-Бізнес-кейс — мережа роздрібних магазинів із даними про продажі.
+Проєкт імітує мережу роздрібних магазинів і реалізує повний потік даних: від транзакційної системи до аналітичних вітрин.
 
-## Архітектура
+---
+
+# Огляд Проєкту
+
+Цей проєкт показує, як можна побудувати сучасну data-platform через пошарову архітектуру:
+
+`OLTP -> Staging -> Data Warehouse -> Data Marts`
+
+Пайплайн обробляє дані продажів і готує їх для аналітичних запитів та звітності.
+
+Основні акценти реалізації:
+
+- пошарова архітектура даних
+- інкрементальні ETL-пайплайни
+- dimensional modeling (fact + dimension tables)
+- оркестрація через Airflow
+- відтворюване середовище через Docker
+
+---
+
+# Архітектура
 
 ```text
 OLTP (PostgreSQL)
@@ -23,154 +41,275 @@ DATA WAREHOUSE (ClickHouse)
 DATA MARTS (ClickHouse)
 ```
 
-Ролі шарів:
-- **OLTP**: операційна система для транзакцій.
-- **Staging**: сирий проміжний layer між джерелом і аналітикою.
-- **Data Warehouse**: вимірна fact-модель для аналітики.
-- **Data Marts**: агреговані бізнес-вітрини для звітності.
+## Відповідальність Шарів
 
-## Технологічний Стек
+### OLTP
+Операційна транзакційна база, де зберігаються сирі бізнес-події.
 
+### Staging
+Проміжний landing-layer для ізоляції джерела та підготовки даних до трансформацій.
+
+### Data Warehouse
+Аналітичне сховище у вимірній моделі, оптимізоване під запити.
+
+### Data Marts
+Агреговані бізнес-вітрини для звітності й аналітики.
+
+---
+
+# Технологічний Стек
+
+## Мови
 - Python
-- SQL (PostgreSQL + ClickHouse)
-- Docker (опційно)
+- SQL
 
-## Модель Даних
+## Бази Даних
+- PostgreSQL (OLTP + staging)
+- ClickHouse (DWH + marts)
 
-Основна DWH-таблиця:
+## Оркестрація
+- Airflow
+
+## Інфраструктура
+- Docker
+
+---
+
+# Модель Даних
+
+DWH використовує dimensional modeling.
+
+## Fact-таблиця
 
 ```text
 fact_sales
 ```
 
-Таблиці вимірів:
+Містить транзакції продажів із посиланнями на виміри.
+
+## Dimension-таблиці
 
 ```text
 dim_users
 dim_products
 ```
 
-## Кроки Pipeline
+Містять описові атрибути для аналітичних зрізів.
 
-1. **OLTP -> Staging**
-   Інкрементальний UPSERT з `public` у `staging` за watermark.
+---
 
-2. **Staging -> DWH**
-   Завантаження вимірів і інкрементальне додавання в `fact_sales`.
+# Потік Pipeline
 
-3. **DWH -> Marts**
-   Оновлення вітрин: `sales_daily`, `sales_by_product`, `sales_by_city`, `sales_by_user`.
+Пайплайн складається з трьох логічних етапів.
 
-## SQL Шар
+## 1. OLTP -> Staging
 
-- `start_sql/create_tables.sql`: OLTP-таблиці + staging-дзеркало (`users`, `products`, `orders`, `order_items`)
-- `start_sql/dwh_schema.sql`: DWH-таблиці в ClickHouse (`dim_users`, `dim_products`, `fact_sales`)
-- `start_sql/marts.sql`: таблиці вітрин у ClickHouse (`sales_daily`, `sales_by_product`, `sales_by_city`, `sales_by_user`)
+Інкрементальна синхронізація з операційної бази.
 
-## Приклади Даних
+Ключові характеристики:
+- watermark-based incremental loading
+- UPSERT-логіка
+- ізоляція джерела
 
-Приклади зрізів по шарах знаходяться у:
+---
+
+## 2. Staging -> Data Warehouse
+
+Трансформація і завантаження у вимірну схему.
+
+Основні кроки:
+- завантаження вимірів
+- наповнення fact-таблиці
+- перевірки якості даних
+
+---
+
+## 3. Data Warehouse -> Data Marts
+
+Агрегаційний шар для аналітичних запитів.
+
+Реалізовані вітрини:
 
 ```text
-data_examples/OLTP
-data_examples/staging
-data_examples/OLAP
-data_examples/marts
+sales_daily
+sales_by_product
+sales_by_city
+sales_by_user
 ```
 
-## Як Запустити (End-to-End)
+---
 
-1. Налаштуй `.env`:
-   - найпростіше: скопіювати шаблон без змін
-   - PowerShell:
-   ```powershell
-   Copy-Item .env.example .env
-   ```
-   - або Linux/macOS:
-   ```bash
-   cp .env.example .env
-   ```
+# Структура Проєкту
 
-2. Запусти весь стек:
-   ```bash
-   docker compose up -d
-   ```
+```text
+retail-data-engineering-pipeline
+|
+|-- airflow
+|   `-- dags
+|
+|-- etl
+|   |-- core
+|   |-- dwh
+|   |-- marts_layer
+|   `-- pipelines
+|
+|-- sql
+|   |-- create_tables.sql
+|   |-- dwh_schema.sql
+|   |-- postgres_etl_metadata.sql
+|   |-- seed_oltp.sql
+|   `-- marts.sql
+|
+|-- data_examples
+|   |-- OLTP
+|   |-- staging
+|   |-- OLAP
+|   `-- marts
+|
+|-- docs
+|
+|-- docker-compose.yml
+|-- requirements.txt
+`-- README.md
+```
 
-3. Підключися до OLTP PostgreSQL у DBeaver (або будь-якому SQL-клієнті):
-   - Host: `127.0.0.1`
-   - Port: `54321`
-   - Database: `sql_practice`
-   - User: `postgres`
-   - Password: `postgres`
-   Примітка: ми використовуємо кастомний зовнішній порт `54321`, щоб не конфліктувати з локальним PostgreSQL на `5432`.
+---
 
-4. Підключися до ClickHouse:
-   - Host: `127.0.0.1`
-   - HTTP Port: `81234`
-   - User: `admin`
-   - Password: `adminpass`
-   - Database: `dwh`
+# Як Запустити
 
-5. Перевір ініціалізацію баз:
-   - У PostgreSQL мають існувати схеми `public`, `staging`, `etl`, а в `public` мають бути seed-дані.
-   - У ClickHouse мають існувати бази `dwh` і `mart` з таблицями.
-   Приклади перевірки:
-   ```sql
-   -- PostgreSQL
-   SELECT table_schema, table_name
-   FROM information_schema.tables
-   WHERE table_schema IN ('public', 'staging', 'etl')
-   ORDER BY 1, 2;
+## 1. Налаштувати Оточення
 
-   SELECT COUNT(*) AS oltp_orders FROM public.orders;
-   ```
-   ```sql
-   -- ClickHouse
-   SHOW DATABASES;
-   SHOW TABLES FROM dwh;
-   SHOW TABLES FROM mart;
-   ```
+PowerShell:
 
-6. Відкрий Airflow:
-   - URL: `http://localhost:8090`
-   - Login: `admin`
-   - Password: `admin`
-   Увімкни DAG `dwh_pipeline` і натисни `Trigger DAG`.
+```powershell
+Copy-Item .env.example .env
+```
 
-7. Після успішного run онови дані в клієнті БД і перевір наповнення:
-   - `staging.*` (PostgreSQL)
-   - `dwh.dim_users`, `dwh.dim_products`, `dwh.fact_sales` (ClickHouse)
-   - `mart.sales_daily`, `mart.sales_by_product`, `mart.sales_by_city`, `mart.sales_by_user` (ClickHouse)
-   Дані мають коректно протекти через усі шари.
+Linux/macOS:
 
-Зупинка стека:
 ```bash
-docker compose down
+cp .env.example .env
 ```
 
-## Очікуваний Результат
+## 2. Запустити Сервіси
 
-Після успішного завершення `dwh_pipeline` в Airflow:
-- усі три task (`raw_etl`, `dwh_etl`, `refresh_marts`) зелені
-- дані присутні на шарах `staging`, `dwh` та `mart`
+```bash
+docker compose up -d
+```
 
-## Підсумки Реалізації
+## 3. Підключитися до PostgreSQL
 
-Що реалізовано:
-- End-to-end data platform: `OLTP (PostgreSQL) -> staging -> DWH (ClickHouse) -> marts`.
-- Інкрементальний ETL `public -> staging` через watermark (`updated_at`, `id`).
-- Завантаження `staging -> DWH` + перевірки якості даних.
-- Оновлення вітрин (`sales_daily`, `sales_by_product`, `sales_by_city`, `sales_by_user`).
-- Оркестрація через Airflow DAG у Docker-оточенні.
+- Host: `127.0.0.1`
+- Port: `54321`
+- Database: `sql_practice`
+- User: `postgres`
+- Password: `postgres`
 
-Чому навчився:
-- Проєктувати шари даних і розділяти відповідальність між ними.
-- Працювати з двома СУБД одночасно (PostgreSQL і ClickHouse).
-- Будувати відтворюваний запуск через `docker compose` і `.env`.
-- Валідувати дані та відлагоджувати ETL-пайплайн за логами Airflow.
+Кастомний зовнішній порт `54321` використовується, щоб уникнути конфлікту з локальним PostgreSQL на `5432`.
 
-З якими проблемами працював:
-- Конфлікт timezone (naive vs aware datetime) в інкрементальному завантаженні.
-- Колізії локальних портів із контейнерними сервісами.
-- Узгодження схем між SQL-ініціалізацією, ETL-кодом і прикладами даних.
+## 4. Підключитися до ClickHouse
 
+- Host: `127.0.0.1`
+- HTTP Port: `81234`
+- User: `admin`
+- Password: `adminpass`
+- Database: `dwh`
+
+## 5. Відкрити Airflow
+
+- URL: `http://localhost:8090`
+- Login: `admin`
+- Password: `admin`
+
+Увімкни DAG `dwh_pipeline` і запусти його вручну.
+
+---
+
+# Очікуваний Результат
+
+Після успішного виконання пайплайна всі Airflow-задачі:
+
+```text
+raw_etl
+dwh_etl
+refresh_marts
+```
+
+мають завершитися зі статусом success.
+
+Дані з'являються у шарах:
+
+## PostgreSQL
+
+```text
+staging.*
+```
+
+## ClickHouse
+
+```text
+dwh.dim_users
+dwh.dim_products
+dwh.fact_sales
+
+mart.sales_daily
+mart.sales_by_product
+mart.sales_by_city
+mart.sales_by_user
+```
+
+Заглушки для скріншотів (заміни на свої):
+
+![Airflow DAG Success](docs/screenshots/airflow_dag_success.png)
+![DWH and Marts Data Check](docs/screenshots/dwh_marts_data_check.png)
+
+---
+
+# Ключові Інженерні Рішення
+
+## PostgreSQL для OLTP
+Обрано як просту транзакційну базу для моделювання роботи retail-системи.
+
+## ClickHouse для Аналітики
+Оптимізований для аналітичних навантажень і великих агрегацій.
+
+## Staging-шар
+Розв'язує залежність між схемою джерела і аналітичними трансформаціями.
+
+## Інкрементальне Завантаження
+Підхід на watermark зменшує обсяг перезавантажень і час обробки.
+
+## Оркестрація через Airflow
+Дає видимість виконання пайплайна та залежностей між задачами.
+
+---
+
+# Чому Я Навчився
+
+У межах проєкту я опрацював:
+
+- пошарову архітектуру data-platform
+- dimensional modeling для аналітики
+- дизайн інкрементального ETL
+- оркестрацію пайплайнів через Airflow
+- побудову відтворюваного локального середовища через Docker
+
+---
+
+# Проблеми, Які Було Вирішено
+
+- конфлікт timezone у інкрементальних завантаженнях
+- конфлікти контейнерних і локальних портів
+- узгодження схем між SQL-ініціалізацією і ETL-кодом
+
+---
+
+# Приклади Даних
+
+Приклади зрізів для кожного шару знаходяться у:
+
+```text
+data_examples/
+```
+
+Ці приклади показують, як дані проходять шлях від OLTP-записів до аналітичних вітрин.

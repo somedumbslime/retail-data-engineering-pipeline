@@ -28,11 +28,11 @@ services:
     environment:
       PGPASSWORD: ${OLTP_POSTGRES_PASSWORD:-postgres}
     volumes:
-      - ./start_sql:/start_sql:ro
+      - ./sql:/sql:ro
     command: >
-      bash -ec "psql -h oltp-postgres -U ${OLTP_POSTGRES_USER:-postgres} -d ${OLTP_POSTGRES_DB:-sql_practice} -f /start_sql/create_tables.sql;
-      psql -h oltp-postgres -U ${OLTP_POSTGRES_USER:-postgres} -d ${OLTP_POSTGRES_DB:-sql_practice} -f /start_sql/postgres_etl_metadata.sql;
-      psql -h oltp-postgres -U ${OLTP_POSTGRES_USER:-postgres} -d ${OLTP_POSTGRES_DB:-sql_practice} -f /start_sql/seed_oltp.sql"
+      bash -ec "psql -h oltp-postgres -U ${OLTP_POSTGRES_USER:-postgres} -d ${OLTP_POSTGRES_DB:-sql_practice} -f /sql/create_tables.sql;
+      psql -h oltp-postgres -U ${OLTP_POSTGRES_USER:-postgres} -d ${OLTP_POSTGRES_DB:-sql_practice} -f /sql/postgres_etl_metadata.sql;
+      psql -h oltp-postgres -U ${OLTP_POSTGRES_USER:-postgres} -d ${OLTP_POSTGRES_DB:-sql_practice} -f /sql/seed_oltp.sql"
     restart: "no"
 
   clickhouse:
@@ -61,10 +61,10 @@ services:
       clickhouse:
         condition: service_healthy
     volumes:
-      - ./start_sql:/start_sql:ro
+      - ./sql:/sql:ro
     command: >
-      bash -ec "clickhouse-client --host clickhouse --user ${CLICKHOUSE_USER:-admin} --password ${CLICKHOUSE_PASSWORD:-adminpass} --multiquery < /start_sql/dwh_schema.sql;
-      clickhouse-client --host clickhouse --user ${CLICKHOUSE_USER:-admin} --password ${CLICKHOUSE_PASSWORD:-adminpass} --multiquery < /start_sql/marts.sql"
+      bash -ec "clickhouse-client --host clickhouse --user ${CLICKHOUSE_USER:-admin} --password ${CLICKHOUSE_PASSWORD:-adminpass} --multiquery < /sql/dwh_schema.sql;
+      clickhouse-client --host clickhouse --user ${CLICKHOUSE_USER:-admin} --password ${CLICKHOUSE_PASSWORD:-adminpass} --multiquery < /sql/marts.sql"
     restart: "no"
 
   airflow-postgres:
