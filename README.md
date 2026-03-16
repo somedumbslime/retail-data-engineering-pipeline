@@ -258,11 +258,6 @@ mart.sales_by_city
 mart.sales_by_user
 ```
 
-Screenshot placeholders (replace with your own):
-
-![Airflow DAG Success](docs/screenshots/airflow_dag_success.png)
-![DWH and Marts Data Check](docs/screenshots/dwh_marts_data_check.png)
-
 ---
 
 # Key Engineering Decisions
